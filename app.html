@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Time is Money | 窝囊费计算器</title>
+    <meta name="description" content="上班为了下班，摸鱼为了快乐。实时计算你的摸鱼收益。">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --digit-height: 1.1em;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #000;
+            color: #fff;
+            overflow-x: hidden;
+            perspective: 1000px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- 极光动态背景 --- */
+        .aurora-bg {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1;
+            background: 
+                radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.4), transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.4), transparent 50%),
+                radial-gradient(circle at 50% 80%, rgba(236, 72, 153, 0.3), transparent 50%);
+            background-size: 200% 200%;
+            animation: auroraMove 20s ease infinite alternate;
+            filter: blur(60px);
+        }
+        @keyframes auroraMove { 0% { background-position: 0% 50%; transform: scale(1); } 100% { background-position: 100% 50%; transform: scale(1.1); } }
+
+        /* --- 动画层 --- */
+        #animationLayer {
+            position: fixed; inset: 0; pointer-events: none; overflow: hidden;
+            z-index: 200; 
+        }
+
+        /* --- 遮罩层 --- */
+        #overlay-backdrop {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px); opacity: 0; pointer-events: none;
+            transition: opacity 0.4s ease; z-index: 40;
+        }
+        body.has-focus #overlay-backdrop { opacity: 1; pointer-events: auto; }
+        body.has-focus { overflow: hidden; }
+
+        /* --- 普通玻璃卡片 --- */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            transition: transform 0.3s ease, border-color 0.3s, box-shadow 0.3s;
+            position: relative; z-index: 10;
+            cursor: pointer;
+        }
+        .glass-panel:active { transform: scale(0.98); }
+        .glass-panel:hover { 
+            border-color: rgba(255, 255, 255, 0.3); 
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+            transform: translateY(-4px);
+        }
+
+        /* --- 详情页模态框 --- */
+        #detailModal {
+            position: fixed; inset: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        #detailModal.active { opacity: 1; pointer-events: auto; }
+        
+        #detailModalBackdrop {
+            position: absolute; inset: 0; 
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(20px);
+        }
+
+        #detailCard {
+            position: relative; z-index: 101;
+            width: 90%; max-width: 600px;
+            background: linear-gradient(135deg, #1a1a20 0%, #0f0f12 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 32px;
+            padding: 3rem 2rem;
+            box-shadow: 0 50px 100px -10px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255,255,255,0.05);
+            transform: scale(0.95); opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            overflow: hidden;
+        }
+        #detailCard::before {
+            content: ''; position: absolute; inset: 0; z-index: 0;
+            background: var(--card-glow, transparent); opacity: 0.15; pointer-events: none;
+        }
+        #detailModal.active #detailCard { transform: scale(1); opacity: 1; }
+
+        .detail-content { position: relative; z-index: 1; width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+        .detail-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 4rem; font-weight: 800; line-height: 1.1;
+            color: white; margin: 1.5rem 0 0.5rem 0;
+            text-shadow: 0 0 40px rgba(255,255,255,0.2);
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .detail-time-anchor {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem; color: rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.05);
+            padding: 0.4rem 1rem; border-radius: 99px;
+            margin-bottom: 2rem; letter-spacing: 1px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .detail-label {
+            font-size: 1.5rem; font-weight: bold; color: rgba(255,255,255,0.9);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        
+        .detail-mapping {
+            font-size: 1.3rem; color: #93c5fd; font-weight: 600;
+            min-height: 2rem; margin-bottom: 2rem;
+            cursor: pointer; transition: all 0.2s;
+            padding: 0.5rem 1.5rem; border-radius: 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            display: flex; align-items: center; gap: 0.5rem; user-select: none;
+        }
+        .detail-mapping:hover { background: rgba(59, 130, 246, 0.2); transform: scale(1.05); color: #bfdbfe; }
+        .detail-mapping:active { transform: scale(0.95); }
+        
+        .detail-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; width: 100%;
+            border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;
+        }
+        .grid-item {
+            background: rgba(255,255,255,0.03); border-radius: 16px; padding: 1rem;
+            display: flex; flex-direction: column; align-items: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .grid-label { font-size: 0.8rem; color: rgba(255,255,255,0.4); margin-bottom: 0.25rem; }
+        .grid-val { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: bold; color: rgba(255,255,255,0.9); }
+
+        /* Config */
+        #configSection { transition: all 0.5s ease; transform-origin: top center; }
+        #configSection.faded { opacity: 0.3; transform: scale(0.95); filter: grayscale(0.8); }
+        #configSection.faded:hover { opacity: 1; transform: scale(1); filter: grayscale(0); }
+
+        /* Input */
+        .input-glass { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); color: white; transition: all 0.3s; }
+        .input-glass:focus { background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.5); box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+        select option { color: #000; }
+
+        /* Roller */
+        .odometer-wrapper { display: inline-flex; flex-direction: row; align-items: center; font-family: 'JetBrains Mono', monospace; overflow: hidden; height: var(--digit-height); line-height: var(--digit-height); vertical-align: bottom; font-variant-numeric: tabular-nums; }
+        .odometer-digit { position: relative; height: var(--digit-height); width: 0.65em; overflow: hidden; display: inline-block; }
+        .odometer-ribbon { display: flex; flex-direction: column; transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); will-change: transform; }
+        .odometer-ribbon div { height: var(--digit-height); display: flex; align-items: center; justify-content: center; }
+        .odometer-static { display: inline-block; height: var(--digit-height); line-height: var(--digit-height); opacity: 0.9; }
+
+        /* Privacy */
+        .privacy-active .odometer-wrapper, 
+        .privacy-active .detail-value, 
+        .privacy-active .grid-val { display: none !important; }
+        .privacy-active #rateDisplay { filter: blur(6px); }
+        
+        .privacy-mask { display: none; font-family: 'JetBrains Mono', monospace; letter-spacing: 4px; filter: blur(4px); }
+        .privacy-active .privacy-mask { display: inline-block !important; }
+
+        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        
+        .glass-btn { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); cursor: pointer; }
+        .glass-btn:hover { background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1)); box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+
+        /* 动画元素 */
+        .anim-element { pointer-events: none; position: fixed; z-index: 201; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5)); }
+        
+        @keyframes flowerRise { 0% { transform: translateY(0) scale(0.5) rotate(0deg); opacity: 0; } 20% { opacity: 1; transform: translateY(-20vh) scale(1) rotate(10deg); } 100% { transform: translateY(-100vh) scale(1.2) rotate(-10deg); opacity: 0; } }
+        @keyframes flyRightToLeft { 0% { transform: translate(0, 0) rotate(0deg) scale(0.5); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-120vw, -20vh) rotate(0deg) scale(1.2); opacity: 1; } }
+        @keyframes sailRightToLeft { 0% { transform: translateX(0); } 100% { transform: translateX(-120vw); } }
+        @keyframes duckRightToLeft { 0% { transform: translateX(0); } 100% { transform: translateX(-120vw); } }
+        @keyframes emojiDrop { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(360deg); opacity: 0; } }
+        @keyframes fireworkPop { 0% { transform: scale(0); opacity: 1; } 50% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+        @keyframes rocketLaunch { 0% { bottom: -200px; } 100% { bottom: 120vh; } }
+        @keyframes bubbleRise { 0% { bottom: -50px; transform: translateX(0) scale(0.5); opacity: 0; } 20% { opacity: 1; } 100% { bottom: 110vh; transform: translateX(-50px) scale(1.2); opacity: 0; } }
+        @keyframes confettiFall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
+        @keyframes coinDrop { 0% { transform: translateY(0) rotateY(0); opacity: 1; } 100% { transform: translateY(100vh) rotateY(720deg); opacity: 0; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .anim-flower { position: fixed; bottom: 0; font-size: 60px; animation: flowerRise 4s ease-out forwards; }
+        .anim-dove { position: fixed; top: 30%; right: -100px; font-size: 60px; animation: flyRightToLeft 7s linear forwards; }
+        .anim-plane { position: fixed; bottom: 20vh; right: -150px; font-size: 120px; z-index: 200; animation: flyRightToLeft 6s ease-out forwards; }
+        .anim-ship { position: fixed; bottom: 20px; right: -150px; font-size: 120px; z-index: 200; animation: sailRightToLeft 15s linear forwards; }
+        .anim-ducks { position: fixed; bottom: 20px; right: -200px; white-space: nowrap; font-size: 60px; z-index: 200; animation: duckRightToLeft 10s linear forwards; }
+        .anim-drop { position: fixed; top: -50px; z-index: 200; animation: emojiDrop 3s linear forwards; }
+        .anim-firework { position: fixed; font-size: 100px; animation: fireworkPop 1.5s ease-out forwards; opacity: 0; }
+        .anim-rocket { position: fixed; bottom: -200px; left: 50%; transform: translateX(-50%); font-size: 150px; animation: rocketLaunch 5s ease-in forwards; }
+        .anim-bubble { position: fixed; bottom: -50px; font-size: 40px; animation: bubbleRise 5s ease-in-out forwards; }
+        .anim-confetti { position: fixed; top: -20px; font-size: 30px; animation: confettiFall 4s linear forwards; }
+        .anim-coin { position: fixed; top: -50px; font-size: 35px; animation: coinDrop 2s cubic-bezier(0.5, 0, 1, 0.5) forwards; }
+        .anim-balloon { position: fixed; bottom: -100px; font-size: 80px; animation: flowerRise 8s ease-out forwards; }
+
+        @media (max-width: 768px) {
+            #detailCard { width: 95%; padding: 2rem 1rem; }
+            .detail-value { font-size: 3rem; }
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center min-h-screen relative selection:bg-blue-500 selection:text-white">
+
+    <div class="aurora-bg"></div>
+
+    <!-- 详情页模态框 (独立) -->
+    <div id="detailModal">
+        <div id="detailModalBackdrop" onclick="window.closeDetail()"></div>
+        <div id="detailCard">
+            <!-- 关闭按钮 -->
+            <button onclick="window.closeDetail()" class="absolute top-4 right-4 p-2 text-white/50 hover:text-white transition-colors text-2xl z-20">✕</button>
+            
+            <div class="detail-content">
+                <!-- 标题 -->
+                <div class="detail-label">
+                    <span id="detailIcon" class="text-2xl"></span>
+                    <span id="detailTitle"></span>
+                </div>
+
+                <!-- 核心大数字 (带隐私遮罩) -->
+                <div class="relative w-full flex justify-center">
+                    <div id="detailNum" class="detail-value">¥0.000</div>
+                    <span class="privacy-mask text-6xl mt-8 mb-8 text-white">****</span>
+                </div>
+
+                <!-- 时间锚点 -->
+                <div id="detailTimeAnchor" class="detail-time-anchor">
+                    统计始于 --
+                </div>
+
+                <!-- 映射文案 (可点击切换) -->
+                <div id="detailMapping" class="detail-mapping" onclick="window.randomizeMapping()" title="点击切换类比">
+                    <span class="text-lg">🔄</span> <span id="mappingText">正在计算...</span>
+                </div>
+
+                <!-- 薪资网格 -->
+                <div class="detail-grid">
+                    <div class="grid-item"><span class="grid-label">秒薪 (Sec)</span><span class="grid-val" id="modal-sec">--</span><span class="privacy-mask text-sm">**</span></div>
+                    <div class="grid-item"><span class="grid-label">分薪 (Min)</span><span class="grid-val" id="modal-min">--</span><span class="privacy-mask text-sm">**</span></div>
+                    <div class="grid-item"><span class="grid-label">时薪 (Hour)</span><span class="grid-val" id="modal-hour">--</span><span class="privacy-mask text-sm">**</span></div>
+                    <div class="grid-item"><span class="grid-label">日薪 (Day)</span><span class="grid-val" id="modal-day">--</span><span class="privacy-mask text-sm">**</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="fixed top-0 w-full p-6 flex justify-between items-center z-[1000] pointer-events-none">
+        <div class="pointer-events-auto">
+            <button id="privacyToggle" class="glass-btn p-3 rounded-full text-white/80 transition-all active:scale-90 group" title="摸鱼隐身术">
+                <span id="eyeIcon" class="group-hover:scale-110 block transition-transform">👁️</span>
+            </button>
+        </div>
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <button id="shareBtn" class="glass-btn p-2 px-3 rounded-full text-white/80 transition-all hover:bg-white/20 active:scale-95 flex items-center gap-2" title="复制链接分享">
+                <span class="text-lg">🔗</span>
+                <span class="text-xs font-bold hidden sm:inline">分享</span>
+            </button>
+            <div class="glass-panel px-4 py-2 rounded-full text-xs font-mono text-white/80 flex items-center gap-2 animate-float shadow-lg">
+                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                总访问量: 100,000+
+            </div>
+        </div>
+    </nav>
+
+    <div id="animationLayer" class="fixed inset-0 pointer-events-none z-40 overflow-hidden"></div>
+    <div id="toastContainer" class="fixed top-24 left-1/2 transform -translate-x-1/2 z-[1001] flex flex-col items-center gap-3 w-full max-w-sm pointer-events-none"></div>
+
+    <!-- 底部居中打赏 -->
+    <button id="donateBtn" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-30 glass-btn px-5 py-4 rounded-full transition-all hover:scale-110 active:scale-95 hidden group flex items-center gap-2" title="请作者喝杯咖啡">
+        <span class="text-2xl group-hover:rotate-12 transition-transform block">☕</span>
+        <span class="text-white/80 text-sm font-light tracking-wider">请作者喝杯咖啡</span>
+    </button>
+
+    <header class="text-center mt-20 mb-12 relative z-10 transition-opacity duration-500">
+        <h1 class="text-5xl md:text-7xl font-black tracking-tighter mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50 drop-shadow-lg">
+            Time is Money
+        </h1>
+        <p class="text-white/80 text-lg font-light tracking-widest uppercase drop-shadow-md">
+            上班为了下班 · <span class="text-blue-300 font-normal">摸鱼为了快乐</span> 🐟
+        </p>
+    </header>
+
+    <main class="w-full max-w-5xl px-4 space-y-8 relative z-10 pb-20">
+        
+        <section id="configSection" class="glass-panel p-8 transition-all duration-500 hover:shadow-2xl">
+            <div class="flex justify-between items-center cursor-pointer group" onclick="toggleConfig()">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">⚙️</div>
+                    <h2 class="text-sm font-bold text-white/90 uppercase tracking-wider">基础信息 / Basic Info</h2>
+                </div>
+                <button class="text-white/50 hover:text-white transition-colors text-sm transform group-hover:translate-x-1" id="configToggleBtn">收起</button>
+            </div>
+            <div id="configContent" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
+                <div class="space-y-2 group">
+                    <label class="text-xs text-blue-200 font-bold uppercase tracking-wider">年收入 (¥)</label>
+                    <div class="relative"><input type="number" id="annualSalary" value="300000" min="0" class="w-full pl-4 pr-4 py-3 rounded-xl input-glass font-mono font-bold text-lg outline-none placeholder-white/30"></div>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-purple-200 font-bold uppercase tracking-wider">工作制</label>
+                    <select id="workDaysPerWeek" class="w-full px-4 py-3 rounded-xl input-glass font-medium outline-none cursor-pointer">
+                        <option value="5">5 天 (双休)</option>
+                        <option value="6">6 天 (单休)</option>
+                        <option value="7">7 天 (007)</option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-pink-200 font-bold uppercase tracking-wider">工时 (h)</label>
+                    <input type="number" id="workHoursPerDay" value="8" min="0" max="24" class="w-full px-4 py-3 rounded-xl input-glass text-center font-mono" placeholder="Hrs">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-pink-200 font-bold uppercase tracking-wider">工作起始时间</label>
+                    <input type="time" id="workStartTime" value="09:00" class="w-full px-4 py-3 rounded-xl input-glass text-center font-mono">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-emerald-200 font-bold uppercase tracking-wider">统计起点</label>
+                    <input type="date" id="startDate" class="w-full px-4 py-3 rounded-xl input-glass font-mono text-sm outline-none">
+                </div>
+                <div class="md:col-span-2 lg:col-span-4 pt-4">
+                    <button id="startBtn" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-900/50 transition-all transform hover:-translate-y-1 active:scale-[0.98] tracking-widest flex items-center justify-center gap-2 group border border-white/10">
+                        <span>启 动 量 化</span>
+                        <span class="group-hover:translate-x-2 transition-transform">🚀</span>
+                    </button>
+                    <p class="text-center text-white/30 text-xs mt-3 font-mono">按 [回车] 键快速启动</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-6 opacity-50 pointer-events-none transition-all duration-1000 transform translate-y-10 filter blur-sm">
+            
+            <!-- Card 1 -->
+            <div class="glass-panel p-8 flex flex-col justify-between min-h-[240px] cursor-pointer hover:scale-[1.02] transition-transform" onclick="window.openDetail('session')">
+                <div class="w-full flex flex-col justify-center h-full">
+                    <h3 class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span> 本次收益
+                    </h3>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-xl text-white/40 font-light currency-symbol">¥</span>
+                        <div id="sessionRoller" class="odometer-wrapper text-4xl lg:text-5xl font-bold text-white tracking-tight">0.000</div>
+                        <span class="privacy-mask text-3xl text-white">****</span>
+                    </div>
+                    <div class="mapping-text hidden text-lg font-bold text-blue-400 mt-2 animate-[fadeIn_0.5s_ease_forwards]"></div>
+                </div>
+                <div class="mt-6 pt-6 border-t border-white/10">
+                    <p class="text-xs text-white/40 mb-2 uppercase">本次摸鱼时长</p>
+                    <p id="sessionSub" class="text-sm font-medium text-blue-200 truncate leading-relaxed">等待启动...</p>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="glass-panel p-8 flex flex-col justify-between min-h-[240px] cursor-pointer hover:scale-[1.02] transition-transform" onclick="window.openDetail('today')">
+                <div class="w-full flex flex-col justify-center h-full">
+                    <h3 class="text-xs font-bold text-emerald-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> 今日战绩
+                    </h3>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl text-white/40 font-light currency-symbol">¥</span>
+                        <div id="todayRoller" class="odometer-wrapper text-5xl lg:text-6xl font-black text-white tracking-tight">0.000</div>
+                        <span class="privacy-mask text-4xl text-white">****</span>
+                    </div>
+                    <div class="mapping-text hidden text-lg font-bold text-emerald-400 mt-2 animate-[fadeIn_0.5s_ease_forwards]"></div>
+                </div>
+                <div class="mt-6 pt-6 border-t border-white/10">
+                    <p class="text-xs text-white/40 mb-2 uppercase">今日已赚</p>
+                    <p id="todaySub" class="text-sm font-medium text-emerald-200 truncate leading-relaxed">计算中...</p>
+                </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="glass-panel p-8 flex flex-col justify-between min-h-[240px] cursor-pointer hover:scale-[1.02] transition-transform" onclick="window.openDetail('total')">
+                <div class="w-full flex flex-col justify-center h-full">
+                    <h3 class="text-xs font-bold text-purple-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span> 累计财富
+                    </h3>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-xl text-white/40 font-light currency-symbol">¥</span>
+                        <div id="totalRoller" class="odometer-wrapper text-4xl lg:text-5xl font-bold text-white tracking-tight">0.000</div>
+                        <span class="privacy-mask text-3xl text-white">****</span>
+                    </div>
+                    <div class="mapping-text hidden text-lg font-bold text-purple-400 mt-2 animate-[fadeIn_0.5s_ease_forwards]"></div>
+                </div>
+                <div class="mt-6 pt-6 border-t border-white/10">
+                    <p class="text-xs text-white/40 mb-2 uppercase" id="sinceLabel">自 -- 起</p>
+                    <p id="totalSub" class="text-sm font-medium text-purple-200 truncate leading-relaxed">累计中...</p>
+                </div>
+            </div>
+
+        </section>
+
+        <div class="text-center space-y-2 mt-10">
+            <div class="h-6 overflow-hidden relative">
+                <p id="rateDisplay" class="text-xs font-mono text-white/30 opacity-0 transition-opacity duration-1000 tracking-widest absolute w-full left-0">
+                    秒薪: ¥0.0000
+                </p>
+            </div>
+        </div>
+
+        <footer class="mt-20 border-t border-white/5 pt-8 text-center space-y-4 pb-10">
+            <p class="text-blue-200/80 text-sm font-medium animate-pulse">
+                💡 小贴士：把网页挂在后台，一会儿回来有惊喜哦 ~
+            </p>
+            <div class="text-white/20 text-[10px] space-y-1 font-light">
+                <p>⚠️ 免责声明：本页面仅供娱乐，请勿用于非法用途（比如找老板兑现）。</p>
+                <p>数据纯属虚构，如有雷同，算你命好。</p>
+                <p>All rights reserved by "Time is Money" Labs.</p>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Welcome & Donate Modals -->
+    <div id="welcomeModal" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md hidden opacity-0 transition-opacity duration-500">
+        <div class="glass-panel p-10 max-w-md w-full mx-4 transform scale-90 transition-transform duration-500 text-center border-white/20" id="welcomeContent">
+            <div class="text-6xl mb-6 animate-bounce">👋</div>
+            <h3 class="text-2xl font-bold text-white mb-4" id="welcomeTitle">欢迎光临</h3>
+            <p class="text-white/80 text-lg leading-relaxed mb-8 font-light" id="welcomeText">...</p>
+            <button onclick="closeWelcome()" class="glass-btn w-full py-4 rounded-xl font-bold text-white hover:bg-white/10 transition-colors tracking-widest uppercase text-sm">
+                开启摸鱼之旅
+            </button>
+        </div>
+    </div>
+
+    <div id="donateModal" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md hidden opacity-0 transition-opacity duration-500">
+        <div class="glass-panel p-8 max-w-lg w-full mx-4 relative border-white/20">
+            <button onclick="toggleDonate()" class="absolute top-4 right-4 text-white/50 hover:text-white transition-colors text-xl">✕</button>
+            <div class="text-center mb-8">
+                <div class="text-5xl mb-4">🍗</div>
+                <h3 class="text-2xl font-bold text-white mb-2">众筹植发 / 护肝基金</h3>
+                <p class="text-white/60 text-sm">如果这个神器让你开心了，不妨赏杯咖啡<br>修补一下开发者因为写代码受损的发际线</p>
+            </div>
+            <div class="grid grid-cols-2 gap-6">
+                <div class="flex flex-col items-center gap-3 group">
+                    <div class="w-full aspect-square bg-white rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-green-500/50 transition-colors">
+                        <img src="/wechat-pay.jpg" alt="微信支付" class="w-full h-full object-cover">
+                    </div>
+                    <span class="text-sm font-mono text-green-400">WeChat Pay</span>
+                </div>
+                <div class="flex flex-col items-center gap-3 group">
+                    <div class="w-full aspect-square bg-white rounded-xl flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-blue-500/50 transition-colors">
+                        <img src="/alipay.jpg" alt="支付宝" class="w-full h-full object-cover">
+                    </div>
+                    <span class="text-sm font-mono text-blue-400">AliPay</span>
+                </div>
+            </div>
+            <p class="text-center text-white/30 text-xs mt-6 italic">“老板不给涨薪，只能靠大家了...”</p>
+        </div>
+    </div>
+
+    <script>
+        // ... Roller Class ...
+        class Roller {
+            constructor(element, initialValue = 0) {
+                this.element = element;
+                this.value = initialValue.toFixed(3);
+                this.render(this.value);
+            }
+            update(newValue) {
+                const nextStr = newValue.toFixed(3);
+                if (nextStr === this.value) return;
+                if (nextStr.length !== this.value.length) { this.render(nextStr); } 
+                else { this.animateTo(nextStr); }
+                this.value = nextStr;
+            }
+            render(str) {
+                this.element.innerHTML = '';
+                for (let char of str) {
+                    if (/[0-9]/.test(char)) {
+                        const wrapper = document.createElement('div'); wrapper.className = 'odometer-digit';
+                        const ribbon = document.createElement('div'); ribbon.className = 'odometer-ribbon';
+                        for (let i = 0; i <= 9; i++) {
+                            const div = document.createElement('div'); div.textContent = i; ribbon.appendChild(div);
+                        }
+                        ribbon.style.transform = `translateY(-${parseInt(char) * 10}%)`;
+                        wrapper.appendChild(ribbon); this.element.appendChild(wrapper);
+                    } else {
+                        const s = document.createElement('div'); s.className = 'odometer-static'; s.textContent = char;
+                        this.element.appendChild(s);
+                    }
+                }
+            }
+            animateTo(nextStr) {
+                const children = this.element.children;
+                if (children.length !== nextStr.length) { this.render(nextStr); return; }
+                for (let i = 0; i < nextStr.length; i++) {
+                    const char = nextStr[i];
+                    const child = children[i];
+                    if (/[0-9]/.test(char) && child.classList.contains('odometer-digit')) {
+                        const ribbon = child.querySelector('.odometer-ribbon');
+                        if (ribbon) ribbon.style.transform = `translateY(-${parseInt(char) * 10}%)`;
+                    } else if (!/[0-9]/.test(char) && child.classList.contains('odometer-static')) {
+                        if (child.textContent !== char) child.textContent = char;
+                    } else { this.render(nextStr); return; }
+                }
+            }
+        }
+
+        (function() {
+            // Constants
+            const WELCOME_MESSAGES = {
+                low: [ "莫欺少年穷，看在钱的份上，先忍了。", "把薪水当成精神损失费，是不是心情好多了？", "别灰心，比尔·盖茨也是从 0 开始的。", "每一秒摸鱼，都是对资本家无声的剥削。", "看开点，至少这里的数字只会涨，不会跌。", "你的潜力巨大，就像这不断跳动的数字一样。", "积少成多，今天的摸鱼是为了明天更好的摸鱼。" ],
+                mid: [ "适度摸鱼，有利于身心健康，防止内耗。", "你不是在浪费时间，是在给灵魂充电。", "带薪发呆，是打工人最高级的浪漫。", "工作是老板的，快乐是免费的。", "即使是螺丝钉，也有停下来生锈的权利。", "最好的投资，就是在工作时间投资（休息）自己。", "摸鱼是门艺术，而你已经是大艺术家了。" ],
+                high: [ "大佬，您的发际线还安好吗？", "苟富贵，勿相忘。别忘了多喝水。", "注意腰椎，钱赚不完，命只有一条。", "您这秒薪，呼吸一次都比别人一顿饭贵。", "能力越大，摸鱼的风险也越大（小心背后）。", "答应我，赚钱的同时，也要好好爱自己。", "这就是金钱的声音吗？听起来真悦耳。" ],
+                generic: [ "生活不只有眼前的苟且，还有湿和远方。", "看一次日落是免费的，生活还有希望。", "在这个快节奏的时代，允许自己慢下来。", "今天的你，也辛苦了（拍拍肩）。", "每一次刷新，都是与更好的自己相遇。", "记得给家人打个电话，他们比钱更重要。" ]
+            };
+            const ITEMS = [ { price: 0.1, emoji: "💭", name: "发一会儿呆" }, { price: 0.5, emoji: "🍬", name: "童年奶糖" }, { price: 2, emoji: "💧", name: "纯净水" }, { price: 3, emoji: "🥚", name: "热乎茶叶蛋" }, { price: 5, emoji: "🌭", name: "烤肠" }, { price: 8, emoji: "🥤", name: "柠檬水" }, { price: 15, emoji: "🍜", name: "牛肉面" }, { price: 25, emoji: "☕", name: "续命咖啡" }, { price: 35, emoji: "🧊", name: "冰美式" }, { price: 55, emoji: "🍿", name: "看场电影" }, { price: 120, emoji: "🍣", name: "回转寿司" }, { price: 220, emoji: "💄", name: "大牌口红" }, { price: 350, emoji: "🦆", name: "北京烤鸭" }, { price: 600, emoji: "🦞", name: "海鲜自助" }, { price: 1500, emoji: "✈️", name: "海边机票" }, { price: 2000, emoji: "🎮", name: "Switch OLED" }, { price: 3000, emoji: "🎸", name: "马丁吉他" }, { price: 5500, emoji: "🏝️", name: "海岛躺平" }, { price: 9999, emoji: "📱", name: "iPhone Pro" }, { price: 25000, emoji: "🏰", name: "欧洲十日游" }, { price: 350000, emoji: "🏔️", name: "登珠峰" }, { price: 1500000, emoji: "🎹", name: "施坦威钢琴" }, { price: 8000000, emoji: "🛥️", name: "豪华游艇" } ];
+            const STAY_NODES = [ { seconds: 60, label: "1分钟" }, { seconds: 300, label: "5分钟" }, { seconds: 600, label: "10分钟" }, { seconds: 1800, label: "30分钟" }, { seconds: 3600, label: "1小时" } ];
+            const MILESTONES = [ 
+                { id: "m5", threshold: 5, msg: "¥{val}，烤肠自由！金币掉落 🪙", anim: "coin" },
+                { id: "m10", threshold: 10, msg: "¥{val}，快乐加倍，气泡升腾 🫧", anim: "bubble" },
+                { id: "m50", threshold: 50, msg: "¥{val}，疯狂星期四！彩带庆祝 🎉", anim: "confetti" },
+                { id: "m100", threshold: 100, msg: "¥{val}，小小幸福，鲜花绽放 🌸", anim: "flower" },
+                { id: "m200", threshold: 200, msg: "¥{val}，甜蜜时刻，糖果雨 🍬", anim: "candy" },
+                { id: "m500", threshold: 500, msg: "¥{val}，大餐一顿，鸭鸭列队 🦆", anim: "duck_march" },
+                { id: "m1000", threshold: 1000, msg: "¥{val}，自由气息，白鸽飞翔 🕊️", anim: "dove" },
+                { id: "m2000", threshold: 2000, msg: "¥{val}，值得庆祝，气球升空 🎈", anim: "balloon" },
+                { id: "m5000", threshold: 5000, msg: "¥{val}，远航梦想，游轮起航 🛳️", anim: "ship" },
+                { id: "m10000", threshold: 10000, msg: "¥{val}，突破万元，烟花盛典 🎆", anim: "firework" },
+                { id: "m20000", threshold: 20000, msg: "¥{val}，说走就走，飞机起飞 ✈️", anim: "plane" },
+                { id: "m50000", threshold: 50000, msg: "¥{val}，奢华假期，海岛风情 🏝️", anim: "island" }, 
+                { id: "m100000", threshold: 100000, msg: "¥{val}，财富自由？金钱雨！💸", anim: "money_rain" },
+                { id: "m1000000", threshold: 1000000, msg: "¥{val}，百万富翁，火箭发射 🚀", anim: "rocket" },
+                { id: "m100000000", threshold: 100000000, msg: "¥{val}，小目标达成！宇宙星辰 🌌", anim: "universe" } 
+            ];
+
+            let state = { configured: false, secondRate: 0, baseTotal: 0, sessionStart: null, timer: null, todayStart: null, todayEnd: null, workDays: 5, privacyMode: false, triggeredNodes: new Set(), triggeredMilestones: new Set(), activeDetailType: null };
+            let rollers = {};
+            let lastShownItems = [];
+
+            // --- Global Functions ---
+            window.togglePrivacy = function() {
+                state.privacyMode = !state.privacyMode;
+                const body = document.body;
+                const icon = document.getElementById('eyeIcon');
+                if (state.privacyMode) { body.classList.add('privacy-active'); icon.innerText = "🙈"; } 
+                else { body.classList.remove('privacy-active'); icon.innerText = "👁️"; }
+            }
+            document.getElementById('privacyToggle').addEventListener('click', window.togglePrivacy);
+
+            // --- New Detail Modal Logic (Aurora Themed) ---
+            window.openDetail = function(type) {
+                state.activeDetailType = type;
+                const modal = document.getElementById('detailModal');
+                const card = document.getElementById('detailCard');
+                const titleEl = document.getElementById('detailTitle');
+                const iconEl = document.getElementById('detailIcon');
+                const timeAnchorEl = document.getElementById('detailTimeAnchor');
+
+                let title = "", icon = "", glowColor = "";
+                let timeText = "";
+                
+                if (type === 'session') { 
+                    title = "本次摸鱼收益"; icon = "🔵"; 
+                    glowColor = "radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.4), transparent 70%)";
+                    const startStr = state.sessionStart ? state.sessionStart.toTimeString().split(' ')[0] : "--:--:--";
+                    timeText = `本次摸鱼始于 ${startStr}`;
+                }
+                else if (type === 'today') { 
+                    title = "今日战绩"; icon = "🟢"; 
+                    glowColor = "radial-gradient(circle at 50% -20%, rgba(16, 185, 129, 0.4), transparent 70%)";
+                    timeText = `今日开工于 ${document.getElementById('workStartTime').value}`;
+                }
+                else { 
+                    title = "累计财富"; icon = "🟣"; 
+                    glowColor = "radial-gradient(circle at 50% -20%, rgba(168, 85, 247, 0.4), transparent 70%)";
+                    timeText = `统计始于 ${state.startDateString}`;
+                }
+
+                titleEl.innerText = title;
+                iconEl.innerText = icon;
+                timeAnchorEl.innerText = timeText;
+                card.style.setProperty('--card-glow', glowColor);
+
+                // Initialize dynamic content
+                window.randomizeMapping(); 
+                updateDetailNumbers();
+
+                modal.classList.add('active');
+            };
+
+            window.closeDetail = function() {
+                state.activeDetailType = null;
+                document.getElementById('detailModal').classList.remove('active');
+            };
+            
+            window.randomizeMapping = function() {
+                const currentVal = getCurrentActiveValue();
+                if (currentVal <= 0) return;
+
+                let candidates = ITEMS.filter(i => i.price <= currentVal);
+                if (candidates.length === 0) candidates = [ITEMS[0]];
+
+                let freshCandidates = candidates.filter(i => !lastShownItems.includes(i.name));
+                if (freshCandidates.length === 0) {
+                    freshCandidates = candidates; 
+                    lastShownItems = [];
+                }
+
+                const item = freshCandidates[Math.floor(Math.random() * freshCandidates.length)];
+                
+                lastShownItems.push(item.name);
+                if (lastShownItems.length > 10) lastShownItems.shift();
+
+                let count = Math.floor(currentVal / item.price);
+                if (count === 0) count = 1;
+                
+                const textEl = document.getElementById('mappingText');
+                textEl.innerText = `≈ ${count} ${item.emoji} ${item.name}`;
+                
+                const container = document.getElementById('detailMapping');
+                container.style.transform = "scale(0.95)";
+                setTimeout(() => container.style.transform = "scale(1)", 150);
+            };
+
+            function getCurrentActiveValue() {
+                if (!state.activeDetailType) return 0;
+                if (state.activeDetailType === 'session') return parseFloat(rollers.session.value);
+                if (state.activeDetailType === 'today') return parseFloat(rollers.today.value);
+                return parseFloat(rollers.total.value);
+            }
+
+            function updateDetailNumbers() {
+                if (!state.activeDetailType) return;
+                const val = getCurrentActiveValue();
+                const el = document.getElementById('detailNum');
+                if(el) el.innerText = '¥' + val.toFixed(3);
+                
+                updateDetailedInfo();
+            }
+
+            window.toggleDonate = function() {
+                const modal = document.getElementById('donateModal');
+                if (modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } 
+                else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 500); }
+            }
+            document.getElementById('donateBtn').addEventListener('click', window.toggleDonate);
+
+            // ... Helpers ...
+            function getWelcomeMessage(annualSalary) { return WELCOME_MESSAGES.generic[0]; }
+            
+            function mapItem(amount) {
+                let best = null; let minDiff = Infinity;
+                for (let item of ITEMS) { let diff = Math.abs(item.price - amount); if (diff < minDiff) { minDiff = diff; best = item; } }
+                if (!best) return { text: "积攒中...", emoji: "🌱" };
+                let count = Math.floor(amount / best.price);
+                return { text: `≈ ${count} ${best.emoji} ${best.name}`, emoji: best.emoji };
+            }
+
+            function isWorkDay(date, maxDays) { let day = date.getDay(); let d = day === 0 ? 7 : day; return d <= maxDays; }
+            
+            function triggerAnimation(type) {
+                const layer = document.getElementById('animationLayer');
+                const createRain = (emojis, count=20, sizeMin=20, sizeMax=50, dur=3) => {
+                    for (let i=0; i<count; i++) {
+                        setTimeout(() => {
+                            const el = document.createElement('div'); el.className = 'anim-element anim-drop';
+                            el.innerText = emojis[Math.floor(Math.random()*emojis.length)];
+                            el.style.left = Math.random()*100 + 'vw';
+                            el.style.fontSize = (sizeMin + Math.random()*(sizeMax-sizeMin)) + 'px';
+                            el.style.animationDuration = (dur + Math.random()*2) + 's';
+                            layer.appendChild(el); setTimeout(() => el.remove(), (dur+2)*1000);
+                        }, i*100);
+                    }
+                };
+                if (type === 'coin') createRain(['🪙','💰','🟡'], 15, 20, 40, 2);
+                else if (type === 'bubble') { for(let i=0; i<15; i++) { setTimeout(() => { const el = document.createElement('div'); el.className = 'anim-element anim-bubble'; el.innerText = '🫧'; el.style.left = (10 + Math.random()*80) + 'vw'; el.style.animationDuration = (4 + Math.random()*2) + 's'; layer.appendChild(el); setTimeout(() => el.remove(), 6000); }, i*200); } }
+                else if (type === 'confetti') createRain(['🎉','🎊','✨'], 30, 30, 60, 3);
+                else if (type === 'flower') { for(let i=0; i<10; i++) { setTimeout(() => { const el = document.createElement('div'); el.className = 'anim-element anim-flower'; el.innerText = ['🌸','🌹','🌻','🌷','🌼'][Math.floor(Math.random()*5)]; el.style.left = (10 + Math.random()*80) + 'vw'; el.style.animationDuration = (3 + Math.random()*2) + 's'; layer.appendChild(el); setTimeout(() => el.remove(), 5000); }, i*300); } }
+                else if (type === 'candy') createRain(['🍬','🍭','🍫','🍪'], 25);
+                else if (type === 'duck_march') { const el = document.createElement('div'); el.className = 'anim-element anim-ducks'; el.innerText = '🦆 🦆 🦆 🦆 🦆'; layer.appendChild(el); setTimeout(() => el.remove(), 10000); }
+                else if (type === 'dove') { for(let i=0; i<5; i++) { setTimeout(() => { const el = document.createElement('div'); el.className = 'anim-element anim-dove'; el.innerText = '🕊️'; el.style.top = (20 + Math.random()*40) + '%'; el.style.animationDuration = (5 + Math.random()*2) + 's'; layer.appendChild(el); setTimeout(() => el.remove(), 8000); }, i*400); } }
+                else if (type === 'balloon') { for(let i=0; i<15; i++) { setTimeout(() => { const el = document.createElement('div'); el.className = 'anim-element anim-balloon'; el.innerText = ['🎈','🎏'][Math.floor(Math.random()*2)]; el.style.left = Math.random()*100 + 'vw'; layer.appendChild(el); setTimeout(() => el.remove(), 8000); }, i*200); } }
+                else if (type === 'ship') { const el = document.createElement('div'); el.className = 'anim-element anim-ship'; el.innerText = '🛳️'; layer.appendChild(el); setTimeout(() => el.remove(), 15000); }
+                else if (type === 'firework') { for(let i=0; i<8; i++) { setTimeout(() => { const el = document.createElement('div'); el.className = 'anim-element anim-firework'; el.innerText = '🎆'; el.style.left = (Math.random()*80 + 10) + 'vw'; el.style.top = (Math.random()*60 + 10) + 'vh'; layer.appendChild(el); setTimeout(() => el.remove(), 2000); }, i*300); } }
+                else if (type === 'plane') { const el = document.createElement('div'); el.className = 'anim-element anim-plane'; el.innerText = '✈️'; layer.appendChild(el); setTimeout(() => el.remove(), 6000); }
+                else if (type === 'island') createRain(['🏝️','🥥','🍹','☀️'], 20, 40, 80, 4);
+                else if (type === 'money_rain') createRain(['💸','💰','🤑','💵'], 50, 30, 60, 2.5);
+                else if (type === 'rocket') { const el = document.createElement('div'); el.className = 'anim-element anim-rocket'; el.innerText = '🚀'; layer.appendChild(el); setTimeout(() => el.remove(), 5000); }
+                else if (type === 'universe') createRain(['🌌','⭐','🪐','🛸'], 30, 40, 100, 5);
+            }
+
+            function showToast(msg) {
+                const box = document.getElementById('toastContainer');
+                const el = document.createElement('div');
+                el.className = "glass-panel px-6 py-4 rounded-full text-sm font-medium text-white shadow-2xl flex items-center gap-3 transform translate-y-10 opacity-0 transition-all duration-500 border border-white/20";
+                el.innerHTML = `<span class="text-xl">✨</span> <span>${msg}</span>`;
+                box.appendChild(el);
+                requestAnimationFrame(() => { el.classList.remove('translate-y-10', 'opacity-0'); });
+                setTimeout(() => { el.classList.add('opacity-0', 'translate-y-[-10px]'); setTimeout(() => el.remove(), 500); }, 4000);
+            }
+
+            function updateDetailedInfo() {
+                const sec = state.secondRate;
+                const min = sec * 60;
+                const hour = sec * 3600;
+                const day = hour * parseFloat(document.getElementById('workHoursPerDay').value || 0);
+                
+                const els = ['modal-sec', 'modal-min', 'modal-hour', 'modal-day'];
+                const vals = [sec.toFixed(4), min.toFixed(2), hour.toFixed(0), day.toFixed(0)];
+                
+                els.forEach((id, idx) => {
+                    const el = document.getElementById(id);
+                    if(el) el.innerText = '¥' + vals[idx];
+                });
+            }
+
+            function tick() {
+                if (!state.configured) return;
+                const now = new Date();
+                // Auto roll-over across days: if the current calendar date is
+                // past state.todayStart's date, advance the work window day by day,
+                // accumulating completed work days into baseTotal.
+                if (state.todayStart) {
+                    const todayMidnight = new Date(now); todayMidnight.setHours(0,0,0,0);
+                    const startMidnight = new Date(state.todayStart); startMidnight.setHours(0,0,0,0);
+                    if (todayMidnight > startMidnight) {
+                        let cursor = new Date(startMidnight);
+                        while (cursor < todayMidnight) {
+                            if (isWorkDay(cursor, state.workDays)) {
+                                state.baseTotal += state.dayIncome;
+                            }
+                            cursor.setDate(cursor.getDate() + 1);
+                        }
+                        const ns = new Date(todayMidnight);
+                        ns.setHours(state.startHour, state.startMin, 0, 0);
+                        state.todayStart = ns;
+                        state.todayEnd = new Date(ns.getTime() + state.hoursPerDay * 3600 * 1000);
+                        // Start a fresh session at the new day's start time so the
+                        // session card reflects today rather than yesterday.
+                        state.sessionStart = new Date(ns);
+                        state.triggeredNodes = new Set();
+                        state.triggeredMilestones = new Set();
+                    }
+                }
+                const isWork = isWorkDay(now, state.workDays);
+                let todayIncome = 0;
+                
+                if (isWork) {
+                    let start = state.todayStart;
+                    let end = state.todayEnd;
+                    if (now > start) {
+                        let validEnd = now > end ? end : now;
+                        let sec = (validEnd - start) / 1000;
+                        if (sec > 0) todayIncome = sec * state.secondRate;
+                    }
+                }
+                
+                let sessionIncome = 0;
+                if (isWork) {
+                    let sStart = state.sessionStart < state.todayStart ? state.todayStart : state.sessionStart;
+                    let sEnd = now > state.todayEnd ? state.todayEnd : now;
+                    if (sEnd > sStart && sStart < state.todayEnd) {
+                        sessionIncome = ((sEnd - sStart) / 1000) * state.secondRate;
+                    }
+                }
+                
+                let total = state.baseTotal + todayIncome;
+
+                rollers.session.update(sessionIncome);
+                rollers.today.update(todayIncome);
+                rollers.total.update(total);
+
+                // Update Dashboard Texts
+                const mapS = mapItem(sessionIncome);
+                document.getElementById('sessionSub').innerText = mapS.text ? mapS.text : "思考中...";
+                
+                const panels = document.querySelectorAll('#dashboard .glass-panel');
+                if (panels[0] && panels[0].querySelector('.mapping-text')) {
+                    panels[0].querySelector('.mapping-text').innerText = mapS.text;
+                }
+                
+                const mapT = mapItem(todayIncome);
+                let todayText = "";
+                if (isWork) {
+                    if (now < state.todayStart) todayText = "还没开工，再睡会 💤";
+                    else if (now > state.todayEnd) todayText = `今日已收工 ${mapT.text}`;
+                    else todayText = mapT.text;
+                } else { todayText = "休息日，看一次日落是免费的 🌅"; }
+                document.getElementById('todaySub').innerText = todayText;
+                
+                if (panels[1] && panels[1].querySelector('.mapping-text')) {
+                    panels[1].querySelector('.mapping-text').innerText = mapT.text;
+                }
+
+                const mapTot = mapItem(total);
+                document.getElementById('totalSub').innerText = mapTot.text;
+                
+                if (panels[2] && panels[2].querySelector('.mapping-text')) {
+                    panels[2].querySelector('.mapping-text').innerText = mapTot.text;
+                }
+
+                updateDetailNumbers();
+
+                // Rate Rotate
+                const rateEl = document.getElementById('rateDisplay');
+                const second = `秒薪: ¥${state.secondRate.toFixed(4)}`;
+                const minute = `分薪: ¥${(state.secondRate * 60).toFixed(2)}`;
+                const hour = `时薪: ¥${(state.secondRate * 3600).toFixed(0)}`;
+                const day = `日薪: ¥${(state.secondRate * 3600 * document.getElementById('workHoursPerDay').value).toFixed(0)}`;
+                const frame = Math.floor(Date.now() / 2500) % 4;
+                if (frame === 0) rateEl.innerText = second;
+                else if (frame === 1) rateEl.innerText = minute;
+                else if (frame === 2) rateEl.innerText = hour;
+                else rateEl.innerText = day;
+                rateEl.classList.remove('opacity-0');
+
+                // Triggers
+                let sessionSec = Math.floor((now - state.sessionStart) / 1000);
+                for (let node of STAY_NODES) {
+                    if (sessionSec >= node.seconds && !state.triggeredNodes.has(node.seconds)) {
+                        state.triggeredNodes.add(node.seconds);
+                        showToast(`摸鱼 ${node.label}，刷出 <b>¥${sessionIncome.toFixed(3)}</b>`);
+                    }
+                }
+                let checkVal = todayIncome; 
+                for (let m of MILESTONES) {
+                    if (checkVal >= m.threshold && !state.triggeredMilestones.has(m.id)) {
+                        state.triggeredMilestones.add(m.id);
+                        showToast(m.msg.replace('{val}', checkVal.toFixed(0)));
+                        if (m.anim) triggerAnimation(m.anim);
+                    }
+                }
+            }
+
+            window.start = function() {
+                const salary = parseFloat(document.getElementById('annualSalary').value);
+                const days = parseInt(document.getElementById('workDaysPerWeek').value);
+                const hours = parseFloat(document.getElementById('workHoursPerDay').value);
+                const startT = document.getElementById('workStartTime').value;
+                const startD = document.getElementById('startDate').value;
+
+                if (!salary || !startD) return alert("请完整填写信息");
+
+                const totalSecPerYear = 52 * days * hours * 3600;
+                state.secondRate = salary / totalSecPerYear;
+                state.workDays = days;
+                state.configured = true;
+
+                const now = new Date();
+                const [sh, sm] = startT.split(':').map(Number);
+                const todayS = new Date(now); todayS.setHours(sh, sm, 0, 0);
+                const todayE = new Date(todayS.getTime() + hours * 3600 * 1000);
+                
+                state.todayStart = todayS;
+                state.todayEnd = todayE;
+                state.sessionStart = new Date();
+                state.startDateString = startD;
+                state.startHour = sh;
+                state.startMin = sm;
+                state.hoursPerDay = hours;
+                state.dayIncome = state.secondRate * hours * 3600;
+                
+                let d = new Date(startD + 'T00:00:00');
+                let base = 0;
+                let dayIncome = state.secondRate * hours * 3600;
+                let tempNow = new Date(); tempNow.setHours(0,0,0,0);
+                
+                const MAX_DAYS = 365 * 50; 
+                let loopCount = 0;
+                while (d < tempNow && loopCount < MAX_DAYS) {
+                     if (isWorkDay(d, days)) base += dayIncome;
+                     d.setDate(d.getDate() + 1);
+                     loopCount++;
+                }
+                state.baseTotal = base;
+
+                document.getElementById('sinceLabel').innerText = '自 ' + startD + ' 起';
+
+                rollers.session = new Roller(document.getElementById('sessionRoller'));
+                rollers.today = new Roller(document.getElementById('todayRoller'));
+                rollers.total = new Roller(document.getElementById('totalRoller'));
+
+                const dashboard = document.getElementById('dashboard');
+                dashboard.classList.remove('opacity-50', 'pointer-events-none', 'translate-y-10', 'filter', 'blur-sm');
+                
+                window.toggleConfig(false);
+                document.getElementById('configSection').classList.add('faded');
+                
+                document.getElementById('shareBtn').classList.remove('hidden');
+                document.getElementById('donateBtn').classList.remove('hidden');
+
+                if (state.timer) clearInterval(state.timer);
+                state.timer = setInterval(tick, 100);
+
+                tick(); 
+                showWelcomeModal(salary);
+            }
+
+            function showWelcomeModal(salary) {
+                const modal = document.getElementById('welcomeModal');
+                const content = document.getElementById('welcomeContent');
+                const textEl = document.getElementById('welcomeText');
+                textEl.innerText = getWelcomeMessage(salary);
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modal.classList.remove('opacity-0');
+                    content.classList.remove('scale-90');
+                    content.classList.add('scale-100');
+                });
+            }
+
+            window.closeWelcome = function() {
+                const modal = document.getElementById('welcomeModal');
+                const content = document.getElementById('welcomeContent');
+                modal.classList.add('opacity-0');
+                content.classList.remove('scale-100');
+                content.classList.add('scale-90');
+                setTimeout(() => modal.classList.add('hidden'), 500);
+            }
+
+            document.getElementById('shareBtn').addEventListener('click', () => {
+                const url = window.location.href;
+                navigator.clipboard.writeText(url).then(() => {
+                    showToast("🔗 链接已复制，快发给你的摸鱼搭子！");
+                }).catch(() => {
+                    showToast("❌ 复制失败，请手动复制地址栏");
+                });
+            });
+
+            window.toggleConfig = (forceState) => {
+                const section = document.getElementById('configSection');
+                const content = document.getElementById('configContent');
+                const btn = document.getElementById('configToggleBtn');
+                const isHidden = content.classList.contains('hidden');
+                if (forceState === false || !isHidden) {
+                    content.classList.add('hidden');
+                    btn.innerText = "展开";
+                    section.classList.remove('p-8');
+                    section.classList.add('px-6', 'py-3');
+                } else {
+                    content.classList.remove('hidden');
+                    btn.innerText = "收起";
+                    section.classList.remove('px-6', 'py-3');
+                    section.classList.add('p-8');
+                }
+            };
+
+            document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('startBtn').addEventListener('click', window.start);
+            
+            document.addEventListener('keydown', (e) => {
+                const isConfigVisible = !document.getElementById('configContent').classList.contains('hidden');
+                if (e.key === 'Enter' && isConfigVisible) {
+                    window.start();
+                    if (document.activeElement.tagName === 'INPUT') document.activeElement.blur();
+                }
+            });
+
+        })();
+    </script>
+</body>
+</html>
