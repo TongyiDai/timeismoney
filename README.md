@@ -5,6 +5,8 @@
 在线体验：<https://timeismoney888.lovable.app/app.html>
 
 ## 这是什么？
+![Uploading image.png…]()
+
 
 **Time is Money** 是一个轻松有趣的“窝囊费 / 摸鱼收益”计算器。
 
