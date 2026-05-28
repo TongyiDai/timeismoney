@@ -2,6 +2,8 @@
 
 > 上班为了下班，摸鱼为了快乐。把看不见的时间，变成看得见的快乐数字。
 
+在线体验：<https://timeismoney888.lovable.app/app.html>
+
 ## 这是什么？
 
 **Time is Money** 是一个轻松有趣的“窝囊费 / 摸鱼收益”计算器。
@@ -65,6 +67,8 @@
 # Time is Money
 
 > Work is for getting off work. Taking a tiny break is for staying human.
+
+Live Demo: <https://timeismoney888.lovable.app/app.html>
 
 ## What is this?
 
