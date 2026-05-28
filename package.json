@@ -1,8 +1,23 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "timeismoney",
+  "version": "1.0.0",
+  "description": "Time is Money｜打工人的摸鱼收益计算器 / bilingual salary-slacking calculator",
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "homepage": "https://timeismoney888.lovable.app/app.html",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TongyiDai/timeismoney.git"
+  },
+  "keywords": [
+    "timeismoney",
+    "calculator",
+    "salary",
+    "productivity",
+    "bilingual",
+    "tanstack-start"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
