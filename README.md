@@ -6,6 +6,7 @@
 
 ## 这是什么？
 
+![Time is Money 中英介绍图](./timeismoney-intro.png)
 
 **Time is Money** 是一个轻松有趣的“窝囊费 / 摸鱼收益”计算器。
 
