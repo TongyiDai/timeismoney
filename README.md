@@ -4,6 +4,8 @@
 
 在线体验：<https://timeismoney888.lovable.app/app.html>
 
+**最近更新：** 优化了英文模式下的货币符号与金额显示逻辑，现在中英切换时，金额符号、提示文案、详情卡片和收益速率展示会一起联动更新。
+
 ## 这是什么？
 
 ![Time is Money 中英介绍图](./timeismoney-intro.png)
