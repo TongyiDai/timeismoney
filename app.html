@@ -443,7 +443,7 @@
                     share: 'Share', donate: 'Buy the author a coffee',
                     basicInfo: 'Basic Info',
                     collapse: 'Collapse', expand: 'Expand',
-                    annualSalary: 'Annual income (¥)', workSchedule: 'Schedule',
+                    annualSalary: 'Annual income ($)', workSchedule: 'Schedule',
                     workHours: 'Hours / day', workStart: 'Workday starts at', startDate: 'Tracking since',
                     days5: '5 days (2-day weekend)', days6: '6 days (1-day off)', days7: '7 days (007)',
                     startBtn: 'START TRACKING', enterTip: 'Press [Enter] to start',
@@ -472,7 +472,7 @@
                     thinking: 'Thinking...', growing: 'Saving up...',
                     linkCopied: '🔗 Link copied! Send it to your slacking buddy.',
                     copyFail: '❌ Copy failed — please copy the URL manually.',
-                    stayToast: 'Slacked for {label} — pocketed <b>¥{val}</b>',
+                    stayToast: 'Slacked for {label} — pocketed <b>${val}</b>',
                     fillAll: 'Please fill in all fields',
                     sinceStart: 'Since {d}',
                     mappingFmt: '≈ {count} × {emoji} {name}',
@@ -480,21 +480,21 @@
                     items: ['daydream break','childhood candy','bottle of water','tea-egg','grilled sausage','lemonade','bowl of beef noodles','coffee refill','iced americano','movie ticket','sushi platter','luxury lipstick','Peking duck','seafood buffet','beach flight','Switch OLED','Martin guitar','island getaway','iPhone Pro','10-day Europe trip','Everest climb','Steinway piano','luxury yacht'],
                     stayLabels: ['1 min','5 min','10 min','30 min','1 hour'],
                     milestoneMsgs: [
-                        '¥{val} — sausage freedom! Coins drop 🪙',
-                        '¥{val} — double joy, bubbles rise 🫧',
-                        '¥{val} — Crazy Thursday! Confetti time 🎉',
-                        '¥{val} — small joys, flowers bloom 🌸',
-                        '¥{val} — sweet moment, candy rain 🍬',
-                        '¥{val} — feast time, ducks on parade 🦆',
-                        '¥{val} — breath of freedom, doves fly 🕊️',
-                        '¥{val} — worth celebrating, balloons up 🎈',
-                        '¥{val} — voyage dreams, ship sets sail 🛳️',
-                        '¥{val} — passed 10K, fireworks gala 🎆',
-                        '¥{val} — say-and-go, plane takes off ✈️',
-                        '¥{val} — luxury vibes, island sunshine 🏝️',
-                        '¥{val} — financial freedom? Money rain! 💸',
-                        '¥{val} — millionaire, rocket launch 🚀',
-                        '¥{val} — mission accomplished! Cosmic stars 🌌'
+                        '${val} — sausage freedom! Coins drop 🪙',
+                        '${val} — double joy, bubbles rise 🫧',
+                        '${val} — Crazy Thursday! Confetti time 🎉',
+                        '${val} — small joys, flowers bloom 🌸',
+                        '${val} — sweet moment, candy rain 🍬',
+                        '${val} — feast time, ducks on parade 🦆',
+                        '${val} — breath of freedom, doves fly 🕊️',
+                        '${val} — worth celebrating, balloons up 🎈',
+                        '${val} — voyage dreams, ship sets sail 🛳️',
+                        '${val} — passed 10K, fireworks gala 🎆',
+                        '${val} — say-and-go, plane takes off ✈️',
+                        '${val} — luxury vibes, island sunshine 🏝️',
+                        '${val} — financial freedom? Money rain! 💸',
+                        '${val} — millionaire, rocket launch 🚀',
+                        '${val} — mission accomplished! Cosmic stars 🌌'
                     ]
                 }
             };
@@ -505,6 +505,7 @@
             })();
             const t = (k) => (I18N[LANG] && I18N[LANG][k] != null ? I18N[LANG][k] : (I18N.zh[k] != null ? I18N.zh[k] : k));
             const fmt = (k, vars) => { let s = t(k); for (let key in vars) s = s.split('{'+key+'}').join(vars[key]); return s; };
+            const currencySymbol = () => LANG === 'en' ? '$' : '¥';
 
             function applyI18n() {
                 document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
@@ -525,6 +526,10 @@
                 if (state.configured) {
                     document.getElementById('sinceLabel').innerText = fmt('sinceStart', {d: state.startDateString});
                 }
+                document.querySelectorAll('.currency-symbol').forEach(el => el.textContent = currencySymbol());
+                const detailNum = document.getElementById('detailNum');
+                if (detailNum && !state.activeDetailType) detailNum.textContent = currencySymbol() + '0.000';
+                if (state.activeDetailType) updateDetailNumbers();
                 refreshDetailModal();
             }
 
@@ -545,6 +550,9 @@
                 { price: 9999, emoji: "📱" }, { price: 25000, emoji: "🏰" }, { price: 350000, emoji: "🏔️" },
                 { price: 1500000, emoji: "🎹" }, { price: 8000000, emoji: "🛥️" }
             ];
+            // CNY → USD conversion for item-equivalent mapping when language switches.
+            const CNY_TO_USD = 1 / 7;
+            const itemPrice = (p) => LANG === 'en' ? p * CNY_TO_USD : p;
             const itemName = (idx) => (I18N[LANG].items[idx] || I18N.zh.items[idx]);
             const STAY_SECONDS = [60, 300, 600, 1800, 3600];
             const stayLabel = (idx) => (I18N[LANG].stayLabels[idx] || I18N.zh.stayLabels[idx]);
@@ -622,8 +630,8 @@
             window.randomizeMapping = function() {
                 const currentVal = getCurrentActiveValue();
                 if (currentVal <= 0) return;
-                let candidates = ITEMS.map((it, i) => ({...it, idx: i})).filter(i => i.price <= currentVal);
-                if (candidates.length === 0) candidates = [{...ITEMS[0], idx: 0}];
+                let candidates = ITEMS.map((it, i) => ({...it, idx: i, price: itemPrice(it.price)})).filter(i => i.price <= currentVal);
+                if (candidates.length === 0) candidates = [{...ITEMS[0], idx: 0, price: itemPrice(ITEMS[0].price)}];
                 let freshCandidates = candidates.filter(i => !lastShownItems.includes(i.idx));
                 if (freshCandidates.length === 0) { freshCandidates = candidates; lastShownItems = []; }
                 const item = freshCandidates[Math.floor(Math.random() * freshCandidates.length)];
@@ -649,7 +657,7 @@
                 if (!state.activeDetailType) return;
                 const val = getCurrentActiveValue();
                 const el = document.getElementById('detailNum');
-                if(el) el.innerText = '¥' + val.toFixed(3);
+                if(el) el.innerText = currencySymbol() + val.toFixed(3);
                 updateDetailedInfo();
             }
 
@@ -662,9 +670,9 @@
 
             function mapItem(amount) {
                 let bestI = -1; let minDiff = Infinity;
-                for (let i=0; i<ITEMS.length; i++) { let diff = Math.abs(ITEMS[i].price - amount); if (diff < minDiff) { minDiff = diff; bestI = i; } }
+                for (let i=0; i<ITEMS.length; i++) { let diff = Math.abs(itemPrice(ITEMS[i].price) - amount); if (diff < minDiff) { minDiff = diff; bestI = i; } }
                 if (bestI < 0) return { text: t('growing'), emoji: "🌱" };
-                let count = Math.floor(amount / ITEMS[bestI].price);
+                let count = Math.floor(amount / itemPrice(ITEMS[bestI].price));
                 return { text: fmt('mappingFmt', {count: count, emoji: ITEMS[bestI].emoji, name: itemName(bestI)}), emoji: ITEMS[bestI].emoji };
             }
 
@@ -720,7 +728,7 @@
                 const vals = [sec.toFixed(4), min.toFixed(2), hour.toFixed(0), day.toFixed(0)];
                 els.forEach((id, idx) => {
                     const el = document.getElementById(id);
-                    if(el) el.innerText = '¥' + vals[idx];
+                    if(el) el.innerText = currencySymbol() + vals[idx];
                 });
             }
 
@@ -793,11 +801,12 @@
                 updateDetailNumbers();
 
                 const rateEl = document.getElementById('rateDisplay');
+                const sym = currencySymbol();
                 const lines = [
-                    `${t('rateSec')}: ¥${state.secondRate.toFixed(4)}`,
-                    `${t('rateMin')}: ¥${(state.secondRate * 60).toFixed(2)}`,
-                    `${t('rateHour')}: ¥${(state.secondRate * 3600).toFixed(0)}`,
-                    `${t('rateDay')}: ¥${(state.secondRate * 3600 * document.getElementById('workHoursPerDay').value).toFixed(0)}`
+                    `${t('rateSec')}: ${sym}${state.secondRate.toFixed(4)}`,
+                    `${t('rateMin')}: ${sym}${(state.secondRate * 60).toFixed(2)}`,
+                    `${t('rateHour')}: ${sym}${(state.secondRate * 3600).toFixed(0)}`,
+                    `${t('rateDay')}: ${sym}${(state.secondRate * 3600 * document.getElementById('workHoursPerDay').value).toFixed(0)}`
                 ];
                 const frame = Math.floor(Date.now() / 2500) % 4;
                 rateEl.innerText = lines[frame];
